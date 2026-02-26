@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tjut.edu.vaccine_system.mapper.SiteVaccineStockMapper">
+
+    <resultMap id="BaseResultMap" type="com.tjut.edu.vaccine_system.model.entity.SiteVaccineStock">
+        <id column="id" property="id"/>
+        <result column="site_id" property="siteId"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="available_stock" property="availableStock"/>
+        <result column="locked_stock" property="lockedStock"/>
+        <result column="created_at" property="createdAt" jdbcType="TIMESTAMP"/>
+        <result column="updated_at" property="updatedAt" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <!-- FEFO：接种点+疫苗维度，取未过期且 available_stock>0 的批次，按 expiry_date 升序 -->
+    <select id="selectFefoBySiteAndVaccine" resultMap="BaseResultMap">
+        SELECT s.id, s.site_id, s.batch_id, s.available_stock, s.locked_stock, s.created_at, s.updated_at
+        FROM site_vaccine_stock s
+        INNER JOIN vaccine_batch b ON s.batch_id = b.id
+        WHERE s.site_id = #{siteId}
+          AND b.vaccine_id = #{vaccineId}
+          AND s.available_stock > 0
+          AND b.expiry_date > CURDATE()
+          AND b.status IN (0, 1)
+        ORDER BY b.expiry_date ASC
+        LIMIT 1
+    </select>
+
+    <!-- 预约锁定：available -1, locked +1 -->
+    <update id="lockStock">
+        UPDATE site_vaccine_stock
+        SET available_stock = available_stock - 1, locked_stock = locked_stock + 1, updated_at = NOW()
+        WHERE id = #{id} AND available_stock > 0
+    </update>
+
+    <!-- 取消预约回滚：available +1, locked -1 -->
+    <update id="unlockStock">
+        UPDATE site_vaccine_stock
+        SET available_stock = available_stock + 1, locked_stock = locked_stock - 1, updated_at = NOW()
+        WHERE id = #{id} AND locked_stock > 0
+    </update>
+
+    <!-- 核销扣减：仅 locked -1（可用已在预约锁定时减过，此处只释放锁定并消耗一剂） -->
+    <update id="deductOnVerify">
+        UPDATE site_vaccine_stock
+        SET locked_stock = locked_stock - 1, updated_at = NOW()
+        WHERE site_id = #{siteId} AND batch_id = #{batchId} AND locked_stock > 0
+    </update>
+
+    <!-- 调拨入库：增加可用库存 -->
+    <update id="addAvailableStock">
+        UPDATE site_vaccine_stock
+        SET available_stock = available_stock + #{quantity}, updated_at = NOW()
+        WHERE site_id = #{siteId} AND batch_id = #{batchId}
+    </update>
+
+    <!-- 接种点退回总仓：减少可用库存（仅可退可用部分，不可退锁定） -->
+    <update id="reduceAvailableStock">
+        UPDATE site_vaccine_stock
+        SET available_stock = available_stock - #{quantity}, updated_at = NOW()
+        WHERE site_id = #{siteId} AND batch_id = #{batchId} AND available_stock >= #{quantity}
+    </update>
+
+    <!-- 过期联动：该批次在各接种点库存清零 -->
+    <update id="zeroOutByBatchId">
+        UPDATE site_vaccine_stock
+        SET available_stock = 0, locked_stock = 0, updated_at = NOW()
+        WHERE batch_id = #{batchId}
+    </update>
+
+    <select id="sumAvailableStockBySiteAndVaccine" resultType="int">
+        SELECT IFNULL(SUM(s.available_stock), 0)
+        FROM site_vaccine_stock s
+        INNER JOIN vaccine_batch b ON s.batch_id = b.id
+        WHERE s.site_id = #{siteId} AND b.vaccine_id = #{vaccineId}
+          AND b.expiry_date > CURDATE() AND b.status IN (0, 1)
+    </select>
+
+    <!-- 某接种点按疫苗汇总可用库存（未过期批次） -->
+    <select id="listAvailableStockGroupByVaccine" resultType="com.tjut.edu.vaccine_system.model.dto.SiteVaccineStockSummaryDTO">
+        SELECT b.vaccine_id AS vaccineId, v.vaccine_name AS vaccineName, SUM(s.available_stock) AS quantity
+        FROM site_vaccine_stock s
+        INNER JOIN vaccine_batch b ON s.batch_id = b.id
+        INNER JOIN vaccine v ON b.vaccine_id = v.id
+        WHERE s.site_id = #{siteId}
+          AND b.expiry_date > CURDATE() AND b.status IN (0, 1)
+        GROUP BY b.vaccine_id, v.vaccine_name
+        HAVING quantity > 0
+    </select>
+
+    <select id="listBySiteIdWithBatchInfo" resultType="com.tjut.edu.vaccine_system.model.vo.SiteStockBatchVO">
+        SELECT s.id AS id, s.site_id AS siteId, s.batch_id AS batchId,
+               b.vaccine_id AS vaccineId, v.vaccine_name AS vaccineName, b.batch_no AS batchNo,
+               b.expiry_date AS expiryDate, s.available_stock AS availableStock, s.locked_stock AS lockedStock
+        FROM site_vaccine_stock s
+        INNER JOIN vaccine_batch b ON s.batch_id = b.id
+        INNER JOIN vaccine v ON b.vaccine_id = v.id
+        WHERE s.site_id = #{siteId}
+        ORDER BY b.expiry_date ASC, s.batch_id
+    </select>
+</mapper>

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tjut.edu.vaccine_system.mapper.StockTransferLogMapper">
+
+    <resultMap id="BaseResultMap" type="com.tjut.edu.vaccine_system.model.entity.StockTransferLog">
+        <id column="id" property="id"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="from_type" property="fromType"/>
+        <result column="from_id" property="fromId"/>
+        <result column="to_type" property="toType"/>
+        <result column="to_id" property="toId"/>
+        <result column="quantity" property="quantity"/>
+        <result column="operator_id" property="operatorId"/>
+        <result column="transfer_time" property="transferTime"/>
+    </resultMap>
+
+    <select id="selectPageList" resultMap="BaseResultMap">
+        SELECT id, batch_id, from_type, from_id, to_type, to_id, quantity, operator_id, transfer_time
+        FROM stock_transfer_log
+        <where>
+            <if test="batchId != null">
+                AND batch_id = #{batchId}
+            </if>
+            <if test="fromTime != null">
+                AND transfer_time &gt;= #{fromTime}
+            </if>
+            <if test="toTime != null">
+                AND transfer_time &lt;= #{toTime}
+            </if>
+        </where>
+        ORDER BY transfer_time DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="countPageList" resultType="long">
+        SELECT COUNT(1) FROM stock_transfer_log
+        <where>
+            <if test="batchId != null">
+                AND batch_id = #{batchId}
+            </if>
+            <if test="fromTime != null">
+                AND transfer_time &gt;= #{fromTime}
+            </if>
+            <if test="toTime != null">
+                AND transfer_time &lt;= #{toTime}
+            </if>
+        </where>
+    </select>
+</mapper>

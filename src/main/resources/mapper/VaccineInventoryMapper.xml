@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tjut.edu.vaccine_system.mapper.VaccineInventoryMapper">
+
+    <select id="listByVaccineNameLikeAndStatus" resultType="com.tjut.edu.vaccine_system.model.entity.VaccineInventory">
+        SELECT vi.id, vi.vaccine_id AS vaccineId, vi.site_id AS siteId, vi.batch_no AS batchNo,
+               vi.quantity, vi.used_quantity AS usedQuantity, vi.expiry_date AS expiryDate,
+               vi.storage_location AS storageLocation, vi.status, vi.create_time AS createTime, vi.update_time AS updateTime
+        FROM vaccine_inventory vi
+        INNER JOIN vaccine v ON vi.vaccine_id = v.id
+        WHERE v.vaccine_name LIKE CONCAT('%', #{vaccineNameLike}, '%')
+          AND vi.status = #{status}
+          AND vi.quantity > 0
+    </select>
+
+    <select id="listExpiringWithinDays" resultType="com.tjut.edu.vaccine_system.model.entity.VaccineInventory">
+        SELECT id, vaccine_id AS vaccineId, site_id AS siteId, batch_no AS batchNo,
+               quantity, used_quantity AS usedQuantity, expiry_date AS expiryDate,
+               storage_location AS storageLocation, status, create_time AS createTime, update_time AS updateTime
+        FROM vaccine_inventory
+        WHERE status = #{status}
+          AND expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL #{withinDays} DAY)
+          AND (quantity - used_quantity) > 0
+        ORDER BY expiry_date ASC
+    </select>
+</mapper>

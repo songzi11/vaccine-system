@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tjut.edu.vaccine_system.mapper.RecordMapper">
+
+    <select id="countToday" resultType="java.lang.Long">
+        SELECT COUNT(*) FROM record
+        WHERE is_deleted = 0 AND DATE(vaccinate_time) = CURDATE()
+    </select>
+
+    <select id="countByVaccine" resultType="java.util.HashMap">
+        SELECT vaccine_id AS vaccineId, COUNT(*) AS count
+        FROM record
+        WHERE is_deleted = 0
+        GROUP BY vaccine_id
+        ORDER BY count DESC
+    </select>
+
+    <select id="countLast7Days" resultType="java.util.HashMap">
+        SELECT DATE_FORMAT(vaccinate_time, '%Y-%m-%d') AS date, COUNT(*) AS count
+        FROM record
+        WHERE is_deleted = 0 AND vaccinate_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        GROUP BY DATE(vaccinate_time)
+        ORDER BY date
+    </select>
+</mapper>

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tjut.edu.vaccine_system.mapper.StatsMapper">
+
+    <select id="countTodayVaccination" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM vaccination_record
+        WHERE DATE(vaccination_date) = CURDATE()
+    </select>
+
+    <!-- 各疫苗库存：优先从简易库存表 vaccine_site_stock 按疫苗汇总 -->
+    <select id="listVaccineStock" resultType="com.tjut.edu.vaccine_system.model.vo.VaccineStockVO">
+        SELECT v.id AS vaccineId,
+               v.vaccine_name AS vaccineName,
+               COALESCE(SUM(ss.stock), 0) AS stock
+        FROM vaccine v
+        LEFT JOIN vaccine_site_stock ss ON v.id = ss.vaccine_id
+        GROUP BY v.id, v.vaccine_name
+        ORDER BY v.id
+    </select>
+
+    <select id="listMonthlyTrend" resultType="com.tjut.edu.vaccine_system.model.vo.MonthlyTrendVO">
+        SELECT DATE_FORMAT(vaccination_date, '%Y-%m') AS month,
+               COUNT(*) AS count
+        FROM vaccination_record
+        WHERE YEAR(vaccination_date) = #{year}
+        GROUP BY DATE_FORMAT(vaccination_date, '%Y-%m')
+        ORDER BY month
+    </select>
+
+    <!-- 低库存预警：简易库存表 vaccine_site_stock 中 stock <= threshold -->
+    <select id="listLowStock" resultType="com.tjut.edu.vaccine_system.model.vo.LowStockVO">
+        SELECT ss.vaccine_id AS vaccineId, v.vaccine_name AS vaccineName,
+               ss.site_id AS siteId, s.site_name AS siteName, ss.stock AS stock
+        FROM vaccine_site_stock ss
+        LEFT JOIN vaccine v ON ss.vaccine_id = v.id
+        LEFT JOIN vaccination_site s ON ss.site_id = s.id
+        WHERE ss.stock &lt;= #{threshold}
+        ORDER BY ss.stock ASC
+    </select>
+
+    <!-- 近 7 天每日接种数（GROUP BY date 与 SELECT 一致，避免 only_full_group_by 报错） -->
+    <select id="listTrendLast7Days" resultType="com.tjut.edu.vaccine_system.model.vo.DailyTrendVO">
+        SELECT DATE_FORMAT(vaccination_date, '%Y-%m-%d') AS date, COUNT(*) AS count
+        FROM vaccination_record
+        WHERE vaccination_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        GROUP BY date
+        ORDER BY date
+    </select>
+
+    <!-- 多维热力图：按接种点、疫苗、日期统计接种量 -->
+    <select id="listHeatmap" resultType="com.tjut.edu.vaccine_system.model.vo.HeatmapCellVO">
+        SELECT r.site_id AS siteId, s.site_name AS siteName,
+               r.vaccine_id AS vaccineId, v.vaccine_name AS vaccineName,
+               DATE_FORMAT(r.vaccination_date, '%Y-%m-%d') AS timeLabel,
+               COUNT(*) AS count
+        FROM vaccination_record r
+        LEFT JOIN vaccination_site s ON r.site_id = s.id
+        LEFT JOIN vaccine v ON r.vaccine_id = v.id
+        WHERE DATE(r.vaccination_date) BETWEEN #{dateFrom} AND #{dateTo}
+        GROUP BY r.site_id, s.site_name, r.vaccine_id, v.vaccine_name, timeLabel
+        ORDER BY timeLabel, siteId, vaccineId
+    </select>
+</mapper>

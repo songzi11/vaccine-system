@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tjut.edu.vaccine_system.mapper.VaccineBatchMapper">
+
+    <resultMap id="BaseResultMap" type="com.tjut.edu.vaccine_system.model.entity.VaccineBatch">
+        <id column="id" property="id"/>
+        <result column="vaccine_id" property="vaccineId"/>
+        <result column="batch_no" property="batchNo"/>
+        <result column="production_date" property="productionDate"/>
+        <result column="expiry_date" property="expiryDate"/>
+        <result column="stock" property="stock"/>
+        <result column="warning_days" property="warningDays"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt" jdbcType="TIMESTAMP"/>
+        <result column="updated_at" property="updatedAt" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <!-- FEFO: 先过期先使用 -->
+    <select id="selectFefoBatch" resultMap="BaseResultMap">
+        SELECT id, vaccine_id, batch_no, production_date, expiry_date, stock, warning_days, status, created_at, updated_at
+        FROM vaccine_batch
+        WHERE vaccine_id = #{vaccineId}
+          AND stock > 0
+          AND expiry_date > CURDATE()
+          AND status IN (0, 1)
+        ORDER BY expiry_date ASC
+        LIMIT 1
+    </select>
+
+    <update id="decrementStock">
+        UPDATE vaccine_batch
+        SET stock = stock - 1, updated_at = NOW()
+        WHERE id = #{batchId} AND stock > 0
+    </update>
+
+    <update id="decrementStockByQuantity">
+        UPDATE vaccine_batch
+        SET stock = stock - #{quantity}, updated_at = NOW()
+        WHERE id = #{batchId} AND stock >= #{quantity}
+    </update>
+
+    <update id="incrementStock">
+        UPDATE vaccine_batch
+        SET stock = stock + 1, updated_at = NOW()
+        WHERE id = #{batchId}
+    </update>
+
+    <update id="incrementStockByQuantity">
+        UPDATE vaccine_batch
+        SET stock = stock + #{quantity}, updated_at = NOW()
+        WHERE id = #{batchId}
+    </update>
+
+    <update id="updateStatusToExpiredWhereExpiryBefore">
+        UPDATE vaccine_batch
+        SET status = 2, updated_at = NOW()
+        WHERE expiry_date &lt; #{date} AND status IN (0, 1)
+    </update>
+
+    <select id="sumWarehouseStockGroupByVaccine" resultType="com.tjut.edu.vaccine_system.model.vo.VaccineStockVO">
+        SELECT b.vaccine_id AS vaccineId, v.vaccine_name AS vaccineName, COALESCE(SUM(b.stock), 0) AS stock
+        FROM vaccine_batch b
+        INNER JOIN vaccine v ON b.vaccine_id = v.id
+        WHERE b.stock > 0 AND b.expiry_date > CURDATE() AND b.status IN (0, 1)
+        GROUP BY b.vaccine_id, v.vaccine_name
+        ORDER BY b.vaccine_id
+    </select>
+</mapper>
