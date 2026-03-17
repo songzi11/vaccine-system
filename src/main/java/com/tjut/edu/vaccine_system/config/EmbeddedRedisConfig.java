@@ -2,6 +2,7 @@ package com.tjut.edu.vaccine_system.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -16,10 +17,15 @@ public class EmbeddedRedisConfig {
     private static final Logger log = LoggerFactory.getLogger(EmbeddedRedisConfig.class);
 
     @Bean
-    public EmbeddedRedisServer embeddedRedisServer() throws IOException {
-        int port = findAvailablePort(10000, 60000);
-        log.info("Starting Embedded Redis on port {}", port);
-        return new EmbeddedRedisServer(port);
+    public EmbeddedRedisServer embeddedRedisServer() {
+        try {
+            int port = findAvailablePort(10000, 60000);
+            log.info("Starting Embedded Redis on port {}", port);
+            return new EmbeddedRedisServer(port);
+        } catch (Exception e) {
+            log.error("Failed to start Embedded Redis: {}", e.getMessage());
+            return null;
+        }
     }
 
     private int findAvailablePort(int minPort, int maxPort) {
@@ -49,15 +55,23 @@ public class EmbeddedRedisConfig {
 
         @jakarta.annotation.PostConstruct
         public void start() {
-            redisServer.start();
-            log.info("Embedded Redis started on port {}", port);
+            try {
+                redisServer.start();
+                log.info("Embedded Redis started on port {}", port);
+            } catch (Exception e) {
+                log.error("Failed to start Embedded Redis server: {}", e.getMessage(), e);
+            }
         }
 
         @jakarta.annotation.PreDestroy
         public void stop() {
             if (redisServer != null) {
-                redisServer.stop();
-                log.info("Embedded Redis stopped");
+                try {
+                    redisServer.stop();
+                    log.info("Embedded Redis stopped");
+                } catch (Exception e) {
+                    log.error("Error stopping Embedded Redis: {}", e.getMessage());
+                }
             }
         }
 
