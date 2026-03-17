@@ -21,6 +21,8 @@ import com.tjut.edu.vaccine_system.service.ChildProfileService;
 import com.tjut.edu.vaccine_system.service.RecordService;
 import com.tjut.edu.vaccine_system.service.SysUserService;
 import com.tjut.edu.vaccine_system.service.VaccinationSiteService;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +53,12 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         this.appointmentService = appointmentService;
         this.recordService = recordService;
         this.vaccinationSiteService = vaccinationSiteService;
+    }
+
+    @Override
+    @Cacheable(value = "user", key = "#id")
+    public SysUser getById(Long id) {
+        return super.getById(id);
     }
 
     @Override
