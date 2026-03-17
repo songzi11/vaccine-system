@@ -25,6 +25,8 @@ import com.tjut.edu.vaccine_system.service.SysUserService;
 import com.tjut.edu.vaccine_system.service.VaccinationSiteService;
 import com.tjut.edu.vaccine_system.service.VaccineSiteStockService;
 import com.tjut.edu.vaccine_system.service.VaccineService;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,6 +65,12 @@ public class VaccinationSiteServiceImpl extends ServiceImpl<VaccinationSiteMappe
     }
 
     @Override
+    @Cacheable(value = "site", key = "#id")
+    public VaccinationSite getById(Long id) {
+        return super.getById(id);
+    }
+
+    @Override
     public IPage<VaccinationSite> pageSites(long current, long size, String siteName, Integer status) {
         Page<VaccinationSite> page = new Page<>(current, size);
         LambdaQueryWrapper<VaccinationSite> wrapper = new LambdaQueryWrapper<>();
@@ -83,6 +91,7 @@ public class VaccinationSiteServiceImpl extends ServiceImpl<VaccinationSiteMappe
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(value = {"site", "site:list"}, allEntries = true)
     public void enable(Long id) {
         VaccinationSite site = getById(id);
         if (site == null) throw new BizException(BizErrorCode.NOT_FOUND, "接种点不存在");
@@ -104,6 +113,7 @@ public class VaccinationSiteServiceImpl extends ServiceImpl<VaccinationSiteMappe
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(value = {"site", "site:list"}, allEntries = true)
     public void disable(Long id) {
         VaccinationSite site = getById(id);
         if (site == null) throw new BizException(BizErrorCode.NOT_FOUND, "接种点不存在");
@@ -116,6 +126,7 @@ public class VaccinationSiteServiceImpl extends ServiceImpl<VaccinationSiteMappe
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(value = {"site", "site:list"}, allEntries = true)
     public void assignDoctor(Long siteId, Long doctorId) {
         VaccinationSite site = getById(siteId);
         if (site == null) throw new BizException(BizErrorCode.NOT_FOUND, "接种点不存在");
@@ -204,6 +215,7 @@ public class VaccinationSiteServiceImpl extends ServiceImpl<VaccinationSiteMappe
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(value = {"site", "site:list"}, allEntries = true)
     public SiteVO saveFromDTO(SiteDTO dto) {
         VaccinationSite site = VaccinationSite.builder()
                 .siteName(dto.getSiteName())
@@ -219,6 +231,7 @@ public class VaccinationSiteServiceImpl extends ServiceImpl<VaccinationSiteMappe
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(value = {"site", "site:list"}, allEntries = true)
     public SiteVO updateFromDTO(Long id, SiteDTO dto) {
         VaccinationSite site = getById(id);
         if (site == null) throw new BizException(BizErrorCode.NOT_FOUND, "接种点不存在");
@@ -293,6 +306,7 @@ public class VaccinationSiteServiceImpl extends ServiceImpl<VaccinationSiteMappe
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(value = {"site", "site:list"}, allEntries = true)
     public void disableSitesByResidentDoctorId(Long doctorId) {
         if (doctorId == null) return;
         List<VaccinationSite> sites = list(new LambdaQueryWrapper<VaccinationSite>()
