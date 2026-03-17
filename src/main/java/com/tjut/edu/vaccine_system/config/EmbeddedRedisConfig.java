@@ -40,15 +40,17 @@ public class EmbeddedRedisConfig {
      */
     public static class EmbeddedRedisServer {
         private final redis.embedded.RedisServer redisServer;
+        private final int port;
 
         public EmbeddedRedisServer(int port) throws IOException {
+            this.port = port;
             this.redisServer = new redis.embedded.RedisServer(port);
         }
 
         @jakarta.annotation.PostConstruct
         public void start() {
             redisServer.start();
-            log.info("Embedded Redis started");
+            log.info("Embedded Redis started on port {}", port);
         }
 
         @jakarta.annotation.PreDestroy
@@ -60,7 +62,7 @@ public class EmbeddedRedisConfig {
         }
 
         public int getPort() {
-            return redisServer.getBind();
+            return port;
         }
     }
 }

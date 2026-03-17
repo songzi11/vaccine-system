@@ -22,9 +22,8 @@ import org.springframework.util.StringUtils;
 @Service
 public class VaccineServiceImpl extends ServiceImpl<VaccineMapper, Vaccine> implements VaccineService {
 
-    @Override
     @Cacheable(value = "vaccine", key = "#id")
-    public Vaccine getById(Long id) {
+    public Vaccine getVaccineById(Long id) {
         return super.getById(id);
     }
 

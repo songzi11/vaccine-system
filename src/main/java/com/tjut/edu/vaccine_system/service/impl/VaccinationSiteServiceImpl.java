@@ -64,9 +64,8 @@ public class VaccinationSiteServiceImpl extends ServiceImpl<VaccinationSiteMappe
         this.stockTransferService = stockTransferService;
     }
 
-    @Override
     @Cacheable(value = "site", key = "#id")
-    public VaccinationSite getById(Long id) {
+    public VaccinationSite getSiteById(Long id) {
         return super.getById(id);
     }
 

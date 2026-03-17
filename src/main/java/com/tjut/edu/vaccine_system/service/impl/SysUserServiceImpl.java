@@ -55,9 +55,8 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         this.vaccinationSiteService = vaccinationSiteService;
     }
 
-    @Override
     @Cacheable(value = "user", key = "#id")
-    public SysUser getById(Long id) {
+    public SysUser getUserById(Long id) {
         return super.getById(id);
     }
 
