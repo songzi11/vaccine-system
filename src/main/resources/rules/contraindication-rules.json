@@ -1,0 +1,12 @@
+[
+  {
+    "ruleCode": "CONTRAINDICATION_CHECK",
+    "ruleName": "禁忌症校验",
+    "ruleGroup": "APPOINTMENT",
+    "priority": 3,
+    "enabled": true,
+    "params": {},
+    "errorCode": "CONTRAINDICATION_CONFLICT",
+    "errorMessage": "儿童禁忌症/过敏史【{keyword}】与该疫苗说明存在冲突，请咨询医生后再预约"
+  }
+]

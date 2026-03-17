@@ -24,6 +24,9 @@ import com.tjut.edu.vaccine_system.model.enums.SiteStatusEnum;
 import com.tjut.edu.vaccine_system.mapper.AppointmentMapper;
 import com.tjut.edu.vaccine_system.mapper.VaccinationRecordMapper;
 import com.tjut.edu.vaccine_system.mapper.VaccinationSiteMapper;
+import com.tjut.edu.vaccine_system.rule.context.AppointmentRuleContext;
+import com.tjut.edu.vaccine_system.rule.engine.RuleEngine;
+import com.tjut.edu.vaccine_system.rule.result.RuleResult;
 import com.tjut.edu.vaccine_system.service.AppointmentService;
 import com.tjut.edu.vaccine_system.service.ChildProfileService;
 import com.tjut.edu.vaccine_system.service.DoctorScheduleService;
@@ -38,7 +41,6 @@ import com.tjut.edu.vaccine_system.model.entity.VaccineBatch;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -49,7 +51,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -59,8 +60,6 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appointment> implements AppointmentService {
-
-    private static final Pattern SPLIT_KEYWORDS = Pattern.compile("[,，\\s]+");
 
     private final SysUserService sysUserService;
     private final ChildProfileService childProfileService;
@@ -72,6 +71,7 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
     private final SiteVaccineStockService siteVaccineStockService;
     private final VaccineBatchService vaccineBatchService;
     private final NoticeService noticeService;
+    private final RuleEngine ruleEngine;
 
     @Override
     public IPage<Appointment> pageAppointments(long current, long size, Long userId, Long vaccineId, Long siteId, Integer status, List<Integer> statusIn, LocalDate appointmentDate) {
@@ -227,30 +227,7 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
             throw new BizException(BizErrorCode.VACCINE_NOT_AVAILABLE, "该疫苗已下架，无法预约");
         }
 
-        if (vaccine.getApplicableAgeMonths() != null) {
-            long ageMonths = ChronoUnit.MONTHS.between(child.getBirthDate(), appointmentDate);
-            if (ageMonths < vaccine.getApplicableAgeMonths()) {
-                throw new BizException(BizErrorCode.BAD_REQUEST,
-                        "该疫苗适用起始月龄为" + vaccine.getApplicableAgeMonths() + "月，当前儿童未达适用年龄");
-            }
-        }
-
-        if (StringUtils.hasText(child.getContraindicationAllergy())) {
-            String allergy = child.getContraindicationAllergy().trim();
-            String desc = (vaccine.getDescription() != null ? vaccine.getDescription() : "")
-                    + (vaccine.getAdverseReactionDesc() != null ? vaccine.getAdverseReactionDesc() : "");
-            for (String keyword : SPLIT_KEYWORDS.split(allergy)) {
-                String k = keyword.trim();
-                if (k.isEmpty()) continue;
-                if (desc.contains(k)) {
-                    throw new BizException(BizErrorCode.BAD_REQUEST,
-                            "儿童禁忌症/过敏史【" + k + "】与该疫苗说明存在冲突，请咨询医生后再预约");
-                }
-            }
-        }
-
-        // 已取消限制：同一疫苗不再要求必须由相同医生接种
-
+        // 查询同疫苗上次接种记录（用于间隔校验）
         List<VaccinationRecord> lastList = vaccinationRecordMapper.selectList(
                 new LambdaQueryWrapper<VaccinationRecord>()
                         .eq(VaccinationRecord::getChildId, childId)
@@ -258,13 +235,25 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
                         .orderByDesc(VaccinationRecord::getVaccinationDate)
                         .last("LIMIT 1"));
         VaccinationRecord lastRecord = lastList.isEmpty() ? null : lastList.get(0);
-        if (lastRecord != null && vaccine.getIntervalDays() != null && vaccine.getIntervalDays() > 0) {
-            LocalDate lastDate = lastRecord.getVaccinationDate().toLocalDate();
-            LocalDate earliestNext = lastDate.plusDays(vaccine.getIntervalDays());
-            if (appointmentDate.isBefore(earliestNext)) {
-                throw new BizException(BizErrorCode.BAD_REQUEST,
-                        "该疫苗两剂间隔至少" + vaccine.getIntervalDays() + "天，下次可约日期不早于" + earliestNext);
-            }
+        LocalDate lastVaccinationDate = lastRecord != null ? lastRecord.getVaccinationDate().toLocalDate() : null;
+
+        // 使用规则引擎进行校验（年龄、间隔、禁忌症）
+        AppointmentRuleContext ruleContext = AppointmentRuleContext.builder()
+                .childId(childId)
+                .birthDate(child.getBirthDate())
+                .vaccineId(vaccineId)
+                .applicableAgeMonths(vaccine.getApplicableAgeMonths())
+                .intervalDays(vaccine.getIntervalDays())
+                .contraindicationAllergy(child.getContraindicationAllergy())
+                .vaccineDescription(vaccine.getDescription())
+                .adverseReactionDesc(vaccine.getAdverseReactionDesc())
+                .appointmentDate(appointmentDate)
+                .lastVaccinationDate(lastVaccinationDate)
+                .build();
+
+        RuleResult ruleResult = ruleEngine.validate("APPOINTMENT", ruleContext);
+        if (!ruleResult.isPassed()) {
+            throw new BizException(BizErrorCode.BAD_REQUEST, ruleResult.getErrorMessage());
         }
 
         // 从接种点库存（site_vaccine_stock）查可用量，FEFO 锁定

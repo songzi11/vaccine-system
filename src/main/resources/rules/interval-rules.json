@@ -1,0 +1,12 @@
+[
+  {
+    "ruleCode": "INTERVAL_CHECK",
+    "ruleName": "接种间隔校验",
+    "ruleGroup": "APPOINTMENT",
+    "priority": 2,
+    "enabled": true,
+    "params": {},
+    "errorCode": "INTERVAL_NOT_ENOUGH",
+    "errorMessage": "该疫苗两剂间隔至少 {intervalDays} 天，下次可约日期不早于 {earliestNextDate}"
+  }
+]

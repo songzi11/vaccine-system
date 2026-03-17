@@ -2,6 +2,7 @@ package com.tjut.edu.vaccine_system.config;
 
 import com.tjut.edu.vaccine_system.security.CompatibleDaoAuthenticationProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -20,6 +21,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     @Autowired
+    @Lazy
     private CompatibleDaoAuthenticationProvider compatibleDaoAuthenticationProvider;
 
     @Bean

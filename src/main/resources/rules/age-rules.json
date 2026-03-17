@@ -1,0 +1,15 @@
+[
+  {
+    "ruleCode": "AGE_CHECK",
+    "ruleName": "适用年龄校验",
+    "ruleGroup": "APPOINTMENT",
+    "priority": 1,
+    "enabled": true,
+    "params": {
+      "minAgeMonths": 0,
+      "maxAgeMonths": 216
+    },
+    "errorCode": "AGE_NOT_APPLICABLE",
+    "errorMessage": "该疫苗适用起始月龄为 {minAgeMonths} 月，当前儿童未达适用年龄"
+  }
+]
