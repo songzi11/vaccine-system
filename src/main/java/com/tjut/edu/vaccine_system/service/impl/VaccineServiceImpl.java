@@ -10,6 +10,8 @@ import com.tjut.edu.vaccine_system.model.entity.Vaccine;
 import com.tjut.edu.vaccine_system.model.enums.VaccineStatusEnum;
 import com.tjut.edu.vaccine_system.mapper.VaccineMapper;
 import com.tjut.edu.vaccine_system.service.VaccineService;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -19,6 +21,12 @@ import org.springframework.util.StringUtils;
  */
 @Service
 public class VaccineServiceImpl extends ServiceImpl<VaccineMapper, Vaccine> implements VaccineService {
+
+    @Override
+    @Cacheable(value = "vaccine", key = "#id")
+    public Vaccine getById(Long id) {
+        return super.getById(id);
+    }
 
     @Override
     public IPage<Vaccine> pageVaccines(long current, long size, String vaccineName, Integer status) {
@@ -32,6 +40,7 @@ public class VaccineServiceImpl extends ServiceImpl<VaccineMapper, Vaccine> impl
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @CacheEvict(value = {"vaccine", "vaccine:list"}, allEntries = true)
     public void updateStatus(Long id, Integer status) {
         Vaccine vaccine = getById(id);
         if (vaccine == null) {
