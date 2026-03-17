@@ -88,4 +88,17 @@ public class StockAndReminderTask {
             log.error("appointment expire task failed", e);
         }
     }
+
+    /** 定时执行：检查留观时间是否到期，将留观中(10)且超过留观时长的预约更新为已完成(2)（默认每 1 分钟执行一次） */
+    @Scheduled(cron = "${vaccine.observation.complete.cron:0 */1 * * * ?}")
+    public void runObservationComplete() {
+        try {
+            int completed = appointmentService.completeObservationExpired();
+            if (completed > 0) {
+                log.info("observation complete: marked_completed={}", completed);
+            }
+        } catch (Exception e) {
+            log.error("observation complete task failed", e);
+        }
+    }
 }

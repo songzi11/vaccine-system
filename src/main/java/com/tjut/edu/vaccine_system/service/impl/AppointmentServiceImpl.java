@@ -16,8 +16,10 @@ import com.tjut.edu.vaccine_system.model.entity.VaccinationSite;
 import com.tjut.edu.vaccine_system.model.entity.Vaccine;
 import com.tjut.edu.vaccine_system.model.enums.AppointmentStatusEnum;
 import com.tjut.edu.vaccine_system.model.enums.ScheduleStatusEnum;
+import com.tjut.edu.vaccine_system.model.enums.UserStatusEnum;
 import com.tjut.edu.vaccine_system.model.enums.VaccineStatusEnum;
 import com.tjut.edu.vaccine_system.model.vo.AppointmentListVO;
+import com.tjut.edu.vaccine_system.model.vo.ScheduleVO;
 import com.tjut.edu.vaccine_system.model.enums.SiteStatusEnum;
 import com.tjut.edu.vaccine_system.mapper.AppointmentMapper;
 import com.tjut.edu.vaccine_system.mapper.VaccinationRecordMapper;
@@ -46,6 +48,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -158,14 +161,36 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
         if (!ScheduleStatusEnum.isEnabled(schedule.getStatus())) {
             throw new BizException(BizErrorCode.SCHEDULE_NOT_AVAILABLE);
         }
-        int maxCap = schedule.getMaxCapacity() != null ? schedule.getMaxCapacity() : 0;
+        // 一个排班只能被一个预约使用
+        int maxCap = schedule.getMaxCapacity() != null ? schedule.getMaxCapacity() : 1;
         int curCount = schedule.getCurrentCount() != null ? schedule.getCurrentCount() : 0;
-        if (curCount >= maxCap) throw new BizException(BizErrorCode.SCHEDULE_NOT_AVAILABLE);
+        if (curCount >= maxCap) {
+            throw new BizException(BizErrorCode.SCHEDULE_NOT_AVAILABLE, "该时段已被预约，请选择其他时段");
+        }
+        // 额外检查：是否已有进行中的预约使用了这个排班（包括已完成的，已完成也不能再预约）
+        boolean alreadyBooked = count(new LambdaQueryWrapper<Appointment>()
+                .eq(Appointment::getDoctorScheduleId, doctorScheduleId)
+                .in(Appointment::getStatus,
+                        AppointmentStatusEnum.BOOKED.getCode(),
+                        AppointmentStatusEnum.CHECKED_IN.getCode(),
+                        AppointmentStatusEnum.PRE_CHECK_PASS.getCode(),
+                        AppointmentStatusEnum.OBSERVING.getCode(),
+                        AppointmentStatusEnum.COMPLETED.getCode())) > 0;
+        if (alreadyBooked) {
+            throw new BizException(BizErrorCode.SCHEDULE_NOT_AVAILABLE, "该时段已被预约，请选择其他时段");
+        }
 
         Long siteId = schedule.getSiteId();
         Long doctorId = schedule.getDoctorId();
         LocalDate appointmentDate = schedule.getScheduleDate();
         String timeSlot = schedule.getTimeSlot() != null ? schedule.getTimeSlot() : "";
+
+        // 检查时段是否已过期（当天且当前时间已超过时段结束时间）
+        if (appointmentDate.equals(LocalDate.now())) {
+            if (isTimeSlotExpired(timeSlot, LocalDateTime.now())) {
+                throw new BizException(BizErrorCode.SCHEDULE_NOT_AVAILABLE, "该时段已过期，请选择其他时段");
+            }
+        }
 
         VaccinationSite site = vaccinationSiteMapper.selectById(siteId);
         if (site == null || !Integer.valueOf(SiteStatusEnum.ENABLED.getCode()).equals(site.getStatus())) {
@@ -340,6 +365,12 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
             Vaccine v = a.getVaccineId() != null ? vaccineService.getById(a.getVaccineId()) : null;
             ChildProfile c = a.getChildId() != null ? childProfileService.getById(a.getChildId()) : null;
             VaccinationSite s = a.getSiteId() != null ? vaccinationSiteMapper.selectById(a.getSiteId()) : null;
+            // 检查医生是否可用（状态为正常）
+            boolean doctorUnavailable = false;
+            if (a.getDoctorId() != null) {
+                SysUser doctor = sysUserService.getById(a.getDoctorId());
+                doctorUnavailable = doctor == null || !Integer.valueOf(UserStatusEnum.NORMAL.getCode()).equals(doctor.getStatus());
+            }
             voList.add(AppointmentListVO.builder()
                     .id(a.getId())
                     .userId(a.getUserId())
@@ -357,7 +388,7 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
                     .vaccineName(v != null ? v.getVaccineName() : null)
                     .childName(c != null ? c.getName() : null)
                     .siteName(s != null ? s.getSiteName() : null)
-                    .doctorUnavailable(false)
+                    .doctorUnavailable(doctorUnavailable)
                     .build());
         }
         Page<AppointmentListVO> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
@@ -489,5 +520,130 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
         } catch (DateTimeParseException e) {
             throw new IllegalArgumentException(fieldName + "格式应为 yyyy-MM-dd，例如 2025-12-12");
         }
+    }
+
+    @Override
+    public List<ScheduleVO> listSchedulesWithBookedStatus(Long siteId, LocalDate fromDate, LocalDate toDate) {
+        // 1. 获取排班列表
+        List<DoctorSchedule> schedules = doctorScheduleService.listBySiteAndDateRange(siteId, fromDate, toDate);
+        if (schedules == null || schedules.isEmpty()) {
+            return List.of();
+        }
+
+        // 2. 获取这些排班中已被预约的ID集合（状态为已预约、已签到、预检通过、留观中、已完成）
+        List<Long> scheduleIds = schedules.stream()
+                .map(DoctorSchedule::getId)
+                .collect(Collectors.toList());
+
+        List<Appointment> bookedAppointments = list(new LambdaQueryWrapper<Appointment>()
+                .in(Appointment::getDoctorScheduleId, scheduleIds)
+                .in(Appointment::getStatus,
+                        AppointmentStatusEnum.BOOKED.getCode(),
+                        AppointmentStatusEnum.CHECKED_IN.getCode(),
+                        AppointmentStatusEnum.PRE_CHECK_PASS.getCode(),
+                        AppointmentStatusEnum.OBSERVING.getCode(),
+                        AppointmentStatusEnum.COMPLETED.getCode()));
+
+        Set<Long> bookedScheduleIds = bookedAppointments.stream()
+                .map(Appointment::getDoctorScheduleId)
+                .collect(Collectors.toSet());
+
+        // 3. 组装VO，标记是否已被预约和是否已过期
+        LocalDateTime now = LocalDateTime.now();
+        LocalDate today = LocalDate.now();
+
+        return schedules.stream().map(s -> {
+            boolean isBooked = bookedScheduleIds.contains(s.getId());
+            // 判断是否已过期：当天且当前时间已超过时段结束时间
+            boolean isExpired = false;
+            if (s.getScheduleDate() != null && s.getTimeSlot() != null && s.getScheduleDate().equals(today)) {
+                isExpired = isTimeSlotExpired(s.getTimeSlot(), now);
+            }
+            return ScheduleVO.builder()
+                    .id(s.getId())
+                    .doctorId(s.getDoctorId())
+                    .doctorName(null) // 如需医生姓名，可额外查询
+                    .siteId(s.getSiteId())
+                    .scheduleDate(s.getScheduleDate())
+                    .timeSlot(s.getTimeSlot())
+                    .maxCapacity(1) // 固定为1，表示只能预约一个孩子
+                    .currentCount(isBooked ? 1 : 0)
+                    .booked(isBooked)
+                    .expired(isExpired)
+                    .status(s.getStatus())
+                    .build();
+        }).collect(Collectors.toList());
+    }
+
+    /**
+     * 判断时段是否已过期
+     * @param timeSlot 时段，格式如 "08:00-08:15"
+     * @param now 当前时间
+     * @return true=已过期，false=未过期
+     */
+    private boolean isTimeSlotExpired(String timeSlot, LocalDateTime now) {
+        if (timeSlot == null || !timeSlot.contains("-")) {
+            return false;
+        }
+        try {
+            String[] parts = timeSlot.split("-");
+            if (parts.length < 2) {
+                return false;
+            }
+            // 解析时段结束时间
+            String endTimeStr = parts[1].trim();
+            String[] endParts = endTimeStr.split(":");
+            if (endParts.length < 2) {
+                return false;
+            }
+            int endHour = Integer.parseInt(endParts[0]);
+            int endMinute = Integer.parseInt(endParts[1]);
+
+            // 构建时段结束时间的 LocalDateTime
+            LocalDateTime slotEndTime = now.withHour(endHour).withMinute(endMinute).withSecond(0).withNano(0);
+
+            // 如果当前时间大于时段结束时间，则已过期
+            return now.isAfter(slotEndTime);
+        } catch (Exception e) {
+            // 解析失败，默认不过期
+            return false;
+        }
+    }
+
+    @Override
+    public int completeObservationExpired() {
+        // 查询所有留观中的预约
+        List<Appointment> observingList = list(new LambdaQueryWrapper<Appointment>()
+                .eq(Appointment::getStatus, AppointmentStatusEnum.OBSERVING.getCode())
+                .isNotNull(Appointment::getObserveStartTime));
+
+        if (observingList == null || observingList.isEmpty()) {
+            return 0;
+        }
+
+        int completedCount = 0;
+        LocalDateTime now = LocalDateTime.now();
+
+        for (Appointment appointment : observingList) {
+            LocalDateTime observeStartTime = appointment.getObserveStartTime();
+            Integer observeDuration = appointment.getObserveDuration();
+
+            if (observeStartTime == null) {
+                continue;
+            }
+
+            // 默认留观30分钟
+            int durationMinutes = (observeDuration != null && observeDuration > 0) ? observeDuration : 30;
+            LocalDateTime observeEndTime = observeStartTime.plusMinutes(durationMinutes);
+
+            // 如果留观时间已到，更新为已完成
+            if (now.isAfter(observeEndTime) || now.isEqual(observeEndTime)) {
+                appointment.setStatus(AppointmentStatusEnum.COMPLETED.getCode());
+                updateById(appointment);
+                completedCount++;
+            }
+        }
+
+        return completedCount;
     }
 }

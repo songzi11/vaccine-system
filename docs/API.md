@@ -1,5 +1,7 @@
 # 疫苗接种系统 - 接口文档（统一）
 
+> **最终版**（本科毕业设计完结）。项目说明与快速开始见 [README.md](README.md)，业务与流程说明见 [使用手册](使用文档.md)。
+
 **基础 URL**：`http://localhost:8080`
 
 **统一响应**：`Result<T>` — `code`(200 成功)、`message`、`data`。分页为 `PageResult<T>`：`records`、`total`、`current`、`size`、`pages`。
@@ -10,9 +12,26 @@
 
 **用户状态（sys_user.status，UserStatusEnum）**：0=正常，1=已禁用，2=已注销（不可恢复）。禁止使用字符串状态。
 
-**预约状态（appointment.status 整数）**：0=待审批 → 5=医生已通过待排班 → 1=已排班 → 2=已完成（接种时生成 record、扣库存）| 3=已取消 | 4=已过期。
+**预约状态（appointment.status 整数）**：
+- 1=已预约（创建预约后，排班先行）
+- 6=已签到
+- 7=预检通过
+- 9=预检未通过
+- 10=留观中
+- 2=已完成（接种完成）
+- 3=已取消
+- 4=已过期
 
-**库存扣减**：预约创建时按 FEFO 锁定接种点按批次库存（site_vaccine_stock：available_stock→locked_stock）；医生完成接种时扣减该批次的 locked_stock、写接种记录。总仓（vaccine_batch）仅通过管理员调拨减少。简易库存（vaccine_site_stock）用于预警与阈值，详见使用手册「库存与调拨架构」。
+**排班先行（doctor_schedule）**：
+- 预约时必须选择 `doctor_schedule_id`，一个排班只能被一个预约使用（capacity=1）
+- 预约日期和时段由排班决定，当天已过期时段不可预约
+- 医生通过排班与预约关联
+
+**库存扣减与批次分配（FEFO）**：
+- **预约时**：按 FEFO（先过期先出）自动从 site_vaccine_stock 选取批次，锁定库存（available_stock→locked_stock），预约单记录 batch_id
+- **核销时**：医生**只能查看** batch_no，不能修改；系统自动扣减该批次的 locked_stock，生成 vaccine_code，写接种记录
+- **总仓**（vaccine_batch）仅通过管理员调拨减少
+- **简易库存**（vaccine_site_stock）用于预警与阈值，详见使用手册「库存与调拨架构」
 
 **疫苗上下架（vaccine.status，VaccineStatusEnum）**：0=下架，1=上架。下架后：用户端/医生端不可选该疫苗预约；用户端疫苗列表、预约选疫苗仅返回上架疫苗；用户端接种点列表的库存、管理员接种点详情及库存接口仅展示上架疫苗的库存；预约创建时若疫苗已下架会报错「该疫苗已下架，无法预约」。
 
@@ -70,14 +89,13 @@
 | GET | `/admin/site/{id}` | 详情（含库存列表、驻场医生、今日预约数），返回 SiteDetailVO |
 | POST | `/admin/site` | 新增（SiteDTO） |
 | PUT | `/admin/site/{id}` | 修改（SiteDTO） |
-| DELETE | `/admin/site/{id}` | 删除 |
 | POST | `/admin/site/enable/{id}` | 启用接种点 |
 | POST | `/admin/site/disable/{id}` | 禁用接种点（禁用后不可预约、用户端不可见） |
 | PUT / POST | `/admin/site/{id}/assignDoctor/{doctorId}` | 指定驻场医生（已取消二次验证）；仅管理员可操作；指派后向该医生推送调遣通知 |
 | POST | `/admin/site/{id}/clearDoctor` | 清空该接种点驻场医生 |
 | GET | `/admin/site/{siteId}/stock` | 某接种点库存列表（SiteStockVO） |
-| POST | `/admin/site/{siteId}/stock/add` | 增加库存（StockAddDTO：仅 vaccineId 必填，**每次固定 +1**） |
-| POST | `/admin/site/{siteId}/stock/reduce` | 减少库存（StockReduceDTO：仅 vaccineId 必填，**每次固定 -1**） |
+| POST | `/admin/site/{siteId}/stock/add` | 增加库存（StockAddDTO：vaccineId、quantity 必填，quantity≥1；从总仓该疫苗 FEFO 批次调拨至本接种点；可选请求头 X-User-Id 为操作人） |
+| POST | `/admin/site/{siteId}/stock/reduce` | 减少库存（StockReduceDTO：vaccineId 必填，quantity 选填默认 1、≥1；按疫苗 FEFO 扣减本接种点可用库存，不退回总仓） |
 
 ### 2.3.1 派遣记录（管理员） `/admin/dispatch`
 
@@ -151,16 +169,27 @@
 |------|------|------|
 | GET | `/admin/doctor/{id}/stats` | 医生账号统计（user 信息、scheduleList、今日预约数、历史接种数） |
 
+### 2.6.3 医生排班 `/admin/doctor-schedule`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/doctor-schedule/page`、`/list` | 分页查询排班（current, size, doctorId, siteId, scheduleDate, status），返回 DoctorScheduleListVO（含医生状态） |
+| GET | `/admin/doctor-schedule/{id}` | 排班详情 |
+| POST | `/admin/doctor-schedule` | 新增排班（maxCapacity 强制为1，不可重复添加同一医生同一时段） |
+| PUT | `/admin/doctor-schedule/{id}` | 更新排班 |
+| DELETE | `/admin/doctor-schedule/{id}` | 删除排班 |
+
+**约束**：排班 capacity=1（每个时段只能被一个预约使用），禁用/注销医生的排班不显示操作按钮。
+
 ### 2.7 预约排期 `/admin/appointment`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/admin/appointment/approved`、`/pending` | 待排班列表（status=5 医生已通过，供管理员排期） |
-| GET | `/admin/appointment/page` | 预约列表（current, size, status 0/1/2/3/4, userId, siteId） |
-| POST | `/admin/appointment/approve/{id}` | 审批/排班（ApproveAppointmentDTO：待审批→已排班，不扣库存） |
+| GET | `/admin/appointment/page` | 预约列表（current, size, status 1/2/3/4/6/7/9/10, userId, siteId） |
 | GET | `/admin/appointment/children` | 儿童档案列表（current, size, parentId） |
-| GET | `/admin/appointment/doctors` | 医生列表（用于排期选择） |
-| POST | `/admin/appointment/schedule` | 排期（兼容，同 approve） |
+| GET | `/admin/appointment/doctors` | 医生列表 |
+
+**注**：排班先行后，家长直接选择医生排班预约，无需管理员排期。
 
 ### 2.8 智能提醒与推送 `/admin/reminder`
 
@@ -208,12 +237,13 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/doctor/appointment/pending` | 待医生审核的预约列表（status=0） |
+| GET | `/doctor/appointment/pending` | 待签到预约列表（status=1 已预约） |
 | GET | `/doctor/appointment`、`/scheduled` | 今日已排班列表（status=1 且 appointmentDate=今日） |
 | GET | `/doctor/appointment/scheduled/future` | 未来已排班列表 |
 | GET | `/doctor/appointment/scheduled/detail/{id}` | 已排班预约详情（DoctorAppointmentDetailVO） |
 | GET | `/doctor/appointment/child/{id}` | 查看宝宝健康档案 |
-| PUT | `/doctor/appointment/{id}/review` | 医生审核预约（ReviewAppointmentDTO：通过→status=5 待排班，拒绝→status=3） |
+| PUT | `/doctor/appointment/{id}/checkin` | 医生确认签到（status=1 → 6 已签到） |
+| PUT | `/doctor/appointment/{id}/precheck` | 医生预检（通过→status=7 预检通过，未通过→status=9 预检未通过） |
 
 ### 3.4 公告（医生） `/doctor/notice`
 
@@ -225,7 +255,18 @@
 | DELETE | `/doctor/notice/{id}/withdraw` | 撤回待审核公告 |
 | POST | `/doctor/notice/feedback` | 对某公告提交意见反馈 |
 
-### 3.5 调遣通知 `/doctor/dispatch`
+### 3.5 留观管理 `/doctor/observation`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/doctor/observation/today` | 获取当日留观中儿童列表（含剩余留观时长），参数 siteId/doctorId 可选 |
+| POST | `/doctor/observation/extend` | 延长留观时间（ObservationExtendDTO：appointmentId, extendMinutes） |
+| POST | `/doctor/observation/complete/{appointmentId}` | 正常结束留观（状态变为已完成） |
+| POST | `/doctor/observation/exception` | 异常终止留观（ObservationExceptionDTO：appointmentId, reason） |
+
+**留观流程**：医生核销接种后，预约状态变为**10留观中**，同时记录 observe_start_time 和 observe_duration（默认30分钟）。医生可在留观管理模块查看留中儿童、剩余时长，支持延长留观、正常结束或异常终止。
+
+### 3.6 调遣通知 `/doctor/dispatch`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -247,10 +288,12 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| GET | `/user/appointment/schedules` | 某接种点驻场医生排班列表（siteId, fromDate, toDate；仅未来30天；返回字段标记是否已被预约） |
 | GET | `/user/appointment/stock` | 某疫苗某接种点可用库存（vaccineId, siteId） |
-| POST | `/user/appointment` | 创建预约（CreateAppointmentDTO，智能检查） |
-| GET | `/user/appointment/page` | 分页我的预约（current, size, userId, vaccineId, siteId, status） |
+| POST | `/user/appointment` | 创建预约（CreateAppointmentDTO，智能检查，排班先行，FEFO自动分配批次） |
+| GET | `/user/appointment/page` | 分页我的预约（current, size, userId, childId, statusType, vaccineId, siteId） |
 | GET | `/user/appointment/{id}` | 预约详情 |
+| POST | `/user/appointment/{id}/cancel` | 用户取消预约（回退排班名额） |
 
 ### 4.3 接种记录 `/user/record`
 
@@ -282,16 +325,18 @@
 
 - **LoginDTO**：`username`, `password`（必填）
 - **SiteDTO**：`siteName` 必填；`address`, `contactPhone`, `workTime`, `status`(0禁用 1启用), `description` 选填
-- **StockAddDTO**：仅 `vaccineId` 必填（每次固定 +1，无需传 quantity）
-- **StockReduceDTO**：仅 `vaccineId` 必填（每次固定 -1，无需传 quantity）
+- **StockAddDTO**：`vaccineId`、`quantity` 必填（quantity≥1，从总仓调拨至接种点数量）
+- **StockReduceDTO**：`vaccineId` 必填，`quantity` 选填默认 1（按疫苗 FEFO 扣减接种点可用库存）
 - **DispatchApplyDTO**：`doctorId`, `fromSiteId`, `toSiteId` 必填
-- **CreateAppointmentDTO**：`vaccineId`, `orderDate`, `siteId` 必填；`orderTime`, `userId`, `childId`, `remark` 选填（预约时校验接种点启用、库存）
-- **CreateRecordDTO**：`appointmentId` 必填；`operatorUserId`, `doseNumber`, `batchNo`, `injectionSite`, `observationOk`, `reaction` 选填
+- **CreateAppointmentDTO**：`vaccineId`, `doctorScheduleId` 必填；`userId`, `childId`, `remark` 选填（预约时校验排班可用、接种点启用、库存充足，按FEFO自动分配批次）
+- **CreateRecordDTO**：`appointmentId`, `injectionSite`, `observationMinutes` 必填；`operatorUserId`, `doseNumber`, `observationOk`, `reaction`, `remark` 选填（批次号由后端从预约记录中自动获取，前端无需传入）
 - **TransferDTO**：`batchId`, `siteId`, `quantity` 必填（总仓调拨至接种点）
 - **BatchDisposeDTO**：`batchId` 必填；`disposalReason`, `disposalDate`, `operatorId`, `remark` 选填
 - **ReviewAppointmentDTO**：`approved`（true/false）, `doctorId`
 - **ScheduleAppointmentDTO**：`appointmentId`, `doctorId`, `scheduleDate` 必填；`timeSlot` 选填
 - **RegisterDTO**：`username`, `password`, `role` 等注册字段（与新增用户类似）
+- **ObservationExtendDTO**：`appointmentId`, `extendMinutes` 必填（延长留观时间）
+- **ObservationExceptionDTO**：`appointmentId`, `reason` 必填（异常终止原因）
 
 ---
 

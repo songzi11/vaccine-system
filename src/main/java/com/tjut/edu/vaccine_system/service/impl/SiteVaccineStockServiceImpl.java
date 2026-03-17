@@ -13,7 +13,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 接种点库存（按批次）Service 实现
@@ -96,6 +98,16 @@ public class SiteVaccineStockServiceImpl extends ServiceImpl<SiteVaccineStockMap
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public boolean reduceAvailableAndLockedStock(Long siteId, Long batchId, int availableQty, int lockedQty) {
+        if (siteId == null || batchId == null) return false;
+        if (availableQty < 0 || lockedQty < 0) return false;
+        if (availableQty == 0 && lockedQty == 0) return true;
+        int rows = baseMapper.reduceAvailableAndLockedStock(siteId, batchId, availableQty, lockedQty);
+        return rows > 0;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public int zeroOutByBatchId(Long batchId) {
         if (batchId == null) return 0;
         return baseMapper.zeroOutByBatchId(batchId);
@@ -129,5 +141,27 @@ public class SiteVaccineStockServiceImpl extends ServiceImpl<SiteVaccineStockMap
     public List<SiteStockBatchVO> listBySiteIdWithBatchInfo(Long siteId) {
         if (siteId == null) return List.of();
         return baseMapper.listBySiteIdWithBatchInfo(siteId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int reduceAvailableStockByVaccine(Long siteId, Long vaccineId, int quantity) {
+        if (siteId == null || vaccineId == null || quantity <= 0) return 0;
+        List<SiteStockBatchVO> batches = baseMapper.listBySiteIdWithBatchInfo(siteId).stream()
+                .filter(b -> vaccineId.equals(b.getVaccineId()) && b.getAvailableStock() != null && b.getAvailableStock() > 0)
+                .sorted(Comparator.nullsLast(Comparator.comparing(SiteStockBatchVO::getExpiryDate)))
+                .collect(Collectors.toList());
+        int remaining = quantity;
+        int totalDeducted = 0;
+        for (SiteStockBatchVO batch : batches) {
+            if (remaining <= 0) break;
+            int deduct = Math.min(batch.getAvailableStock(), remaining);
+            boolean ok = reduceAvailableStock(siteId, batch.getBatchId(), deduct);
+            if (ok) {
+                totalDeducted += deduct;
+                remaining -= deduct;
+            }
+        }
+        return totalDeducted;
     }
 }

@@ -8,6 +8,7 @@ import com.tjut.edu.vaccine_system.model.dto.CreateAppointmentDTO;
 import com.tjut.edu.vaccine_system.model.entity.Appointment;
 import com.tjut.edu.vaccine_system.model.entity.DoctorSchedule;
 import com.tjut.edu.vaccine_system.model.vo.AppointmentListVO;
+import com.tjut.edu.vaccine_system.model.vo.ScheduleVO;
 import com.tjut.edu.vaccine_system.service.AppointmentService;
 import com.tjut.edu.vaccine_system.service.DoctorScheduleService;
 import com.tjut.edu.vaccine_system.service.SiteVaccineStockService;
@@ -33,9 +34,9 @@ public class UserAppointmentController {
     private final SiteVaccineStockService siteVaccineStockService;
     private final DoctorScheduleService doctorScheduleService;
 
-    @Operation(summary = "某接种点驻场医生排班列表（仅未来30天内；含已约满时段，前端用 currentCount>=maxCapacity 显示已约不可选）")
+    @Operation(summary = "某接种点驻场医生排班列表（仅未来30天内；返回字段标记是否已被预约）")
     @GetMapping("/schedules")
-    public Result<List<DoctorSchedule>> listSchedules(
+    public Result<List<ScheduleVO>> listSchedules(
             @RequestParam Long siteId,
             @RequestParam(required = false) LocalDate fromDate,
             @RequestParam(required = false) LocalDate toDate) {
@@ -43,7 +44,7 @@ public class UserAppointmentController {
         if (toDate == null) toDate = fromDate.plusDays(30);
         LocalDate maxEnd = fromDate.plusDays(30);
         if (toDate.isAfter(maxEnd)) toDate = maxEnd;
-        List<DoctorSchedule> list = doctorScheduleService.listBySiteAndDateRange(siteId, fromDate, toDate);
+        List<ScheduleVO> list = appointmentService.listSchedulesWithBookedStatus(siteId, fromDate, toDate);
         return Result.ok(list);
     }
 

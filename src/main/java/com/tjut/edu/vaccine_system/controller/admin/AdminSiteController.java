@@ -6,10 +6,13 @@ import com.tjut.edu.vaccine_system.common.result.Result;
 import com.tjut.edu.vaccine_system.common.result.ResultCode;
 import com.tjut.edu.vaccine_system.common.result.Results;
 import com.tjut.edu.vaccine_system.model.dto.SiteDTO;
+import com.tjut.edu.vaccine_system.model.dto.StockAddDTO;
+import com.tjut.edu.vaccine_system.model.dto.StockReduceDTO;
 import com.tjut.edu.vaccine_system.model.vo.SiteDetailVO;
 import com.tjut.edu.vaccine_system.model.vo.SiteStockVO;
 import com.tjut.edu.vaccine_system.model.vo.SiteVO;
 import com.tjut.edu.vaccine_system.service.SiteVaccineStockService;
+import com.tjut.edu.vaccine_system.service.StockTransferService;
 import com.tjut.edu.vaccine_system.service.VaccinationSiteService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,6 +32,7 @@ public class AdminSiteController {
 
     private final VaccinationSiteService vaccinationSiteService;
     private final SiteVaccineStockService siteVaccineStockService;
+    private final StockTransferService stockTransferService;
 
     @Operation(summary = "分页查询")
     @GetMapping(value = {"/page", "/list"})
@@ -79,13 +83,6 @@ public class AdminSiteController {
         return Result.ok("修改成功", vo);
     }
 
-    @Operation(summary = "删除（先将该接种点所有疫苗退回总仓再删除）")
-    @DeleteMapping("/{id}")
-    public Result<Void> remove(@PathVariable Long id) {
-        boolean ok = vaccinationSiteService.removeSite(id);
-        return ok ? Result.ok() : Result.fail(ResultCode.NOT_FOUND.getCode(), "删除失败");
-    }
-
     @Operation(summary = "启用接种点")
     @PostMapping("/enable/{id}")
     public Result<Void> enable(@PathVariable Long id) {
@@ -114,14 +111,46 @@ public class AdminSiteController {
         return Result.ok("已清空驻场医生");
     }
 
-    // --------------- 接种点库存（只读展示，与预约/用户端一致：来自总仓调拨 site_vaccine_stock；增减请在「疫苗管理-库存管理」中分配）---------------
+    // --------------- 接种点库存：查询 + 管理员增减（增加=从总仓 FEFO 调拨，减少=按疫苗 FEFO 扣减不退回总仓）---------------
 
-    @Operation(summary = "某接种点库存列表（按疫苗汇总可用库存，只读）")
+    @Operation(summary = "某接种点库存列表（按疫苗汇总可用库存）")
     @GetMapping("/{siteId}/stock")
     public Result<java.util.List<SiteStockVO>> listStock(@PathVariable Long siteId) {
         if (vaccinationSiteService.getById(siteId) == null) {
             return Result.fail(ResultCode.NOT_FOUND.getCode(), "接种点不存在");
         }
         return Result.ok(siteVaccineStockService.listAvailableStockByVaccineForSite(siteId));
+    }
+
+    @Operation(summary = "增加库存（从总仓该疫苗 FEFO 批次调拨至本接种点）")
+    @PostMapping("/{siteId}/stock/add")
+    public Result<Void> addStock(
+            @PathVariable Long siteId,
+            @Valid @RequestBody StockAddDTO dto,
+            @RequestHeader(value = "X-User-Id", required = false) Long operatorId) {
+        if (vaccinationSiteService.getById(siteId) == null) {
+            return Result.fail(ResultCode.NOT_FOUND.getCode(), "接种点不存在");
+        }
+        stockTransferService.allocateByVaccine(siteId, dto.getVaccineId(), dto.getQuantity(), operatorId);
+        return Result.ok("库存已增加 " + dto.getQuantity() + " 支");
+    }
+
+    @Operation(summary = "减少库存（按疫苗 FEFO 扣减本接种点可用库存，不退回总仓）")
+    @PostMapping("/{siteId}/stock/reduce")
+    public Result<Void> reduceStock(
+            @PathVariable Long siteId,
+            @Valid @RequestBody StockReduceDTO dto) {
+        if (vaccinationSiteService.getById(siteId) == null) {
+            return Result.fail(ResultCode.NOT_FOUND.getCode(), "接种点不存在");
+        }
+        int qty = dto.getQuantity() != null && dto.getQuantity() >= 1 ? dto.getQuantity() : 1;
+        int deducted = siteVaccineStockService.reduceAvailableStockByVaccine(siteId, dto.getVaccineId(), qty);
+        if (deducted == 0) {
+            return Result.fail(ResultCode.BAD_REQUEST.getCode(), "该接种点该疫苗暂无可用库存或库存不足");
+        }
+        if (deducted < qty) {
+            return Result.ok("库存不足，已扣减 " + deducted + " 支（请求 " + qty + " 支）");
+        }
+        return Result.ok("库存已减少 " + deducted + " 支");
     }
 }

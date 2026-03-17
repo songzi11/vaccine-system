@@ -304,13 +304,4 @@ public class VaccinationSiteServiceImpl extends ServiceImpl<VaccinationSiteMappe
             stockTransferService.returnAllSiteStockToWarehouse(site.getId(), null);
         }
     }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public boolean removeSite(Long id) {
-        VaccinationSite site = getById(id);
-        if (site == null) return false;
-        stockTransferService.returnAllSiteStockToWarehouse(id, null);
-        return removeById(id);
-    }
 }

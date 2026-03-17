@@ -27,6 +27,10 @@ public class DoctorAppointmentDetailVO implements Serializable {
     private String parentPhone;
     private String vaccineName;
     private String siteName;
+    /** 疫苗批次号（FEFO锁定，只读） */
+    private String batchNo;
+    /** 疫苗生产厂家 */
+    private String manufacturer;
     /** 该宝宝过往接种记录（含疫苗名、接种点名、医生名） */
     private List<RecordVO> pastRecords;
 }

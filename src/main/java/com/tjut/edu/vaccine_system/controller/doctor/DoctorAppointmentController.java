@@ -17,7 +17,9 @@ import com.tjut.edu.vaccine_system.service.ChildProfileService;
 import com.tjut.edu.vaccine_system.service.RecordService;
 import com.tjut.edu.vaccine_system.service.SysUserService;
 import com.tjut.edu.vaccine_system.service.VaccinationSiteService;
+import com.tjut.edu.vaccine_system.service.VaccineBatchService;
 import com.tjut.edu.vaccine_system.service.VaccineService;
+import com.tjut.edu.vaccine_system.model.entity.VaccineBatch;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +45,7 @@ public class DoctorAppointmentController {
     private final RecordService recordService;
     private final VaccineService vaccineService;
     private final VaccinationSiteService vaccinationSiteService;
+    private final VaccineBatchService vaccineBatchService;
 
     @Operation(summary = "今日已预约列表（status=1 且 appointmentDate=今日，供待接种-今日）")
     @GetMapping(value = {"", "/", "/scheduled"})
@@ -80,6 +83,8 @@ public class DoctorAppointmentController {
         List<RecordVO> pastRecords = child != null ? recordService.listByChildIdWithNames(child.getId()) : List.of();
         Vaccine vaccine = appointment.getVaccineId() != null ? vaccineService.getById(appointment.getVaccineId()) : null;
         VaccinationSite site = appointment.getSiteId() != null ? vaccinationSiteService.getById(appointment.getSiteId()) : null;
+        // 查询批次信息（疫苗名称、批次号、生产厂家）
+        VaccineBatch batch = appointment.getBatchId() != null ? vaccineBatchService.getById(appointment.getBatchId()) : null;
         DoctorAppointmentDetailVO vo = DoctorAppointmentDetailVO.builder()
                 .appointment(appointment)
                 .child(child)
@@ -87,6 +92,8 @@ public class DoctorAppointmentController {
                 .parentPhone(parent != null ? parent.getPhone() : null)
                 .vaccineName(vaccine != null ? vaccine.getVaccineName() : null)
                 .siteName(site != null ? site.getSiteName() : null)
+                .batchNo(batch != null ? batch.getBatchNo() : null)
+                .manufacturer(vaccine != null ? vaccine.getManufacturer() : null)
                 .pastRecords(pastRecords)
                 .build();
         return Result.ok(vo);

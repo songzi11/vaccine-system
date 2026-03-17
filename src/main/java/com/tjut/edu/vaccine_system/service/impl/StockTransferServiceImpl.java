@@ -127,10 +127,29 @@ public class StockTransferServiceImpl implements StockTransferService {
         if (siteId == null) return;
         List<SiteVaccineStock> list = siteVaccineStockService.listBySiteId(siteId);
         for (SiteVaccineStock row : list) {
+            Long batchId = row.getBatchId();
+            if (batchId == null) continue;
             int available = row.getAvailableStock() != null ? row.getAvailableStock() : 0;
-            if (available > 0 && row.getBatchId() != null) {
-                returnToWarehouse(siteId, row.getBatchId(), available, operatorId);
+            int locked = row.getLockedStock() != null ? row.getLockedStock() : 0;
+            int total = available + locked;
+            if (total <= 0) continue;
+            boolean reduced = siteVaccineStockService.reduceAvailableAndLockedStock(siteId, batchId, available, locked);
+            if (!reduced) {
+                throw new BizException(BizErrorCode.STOCK_INSUFFICIENT,
+                        "该接种点批次库存扣减失败，无法退回总仓（siteId=" + siteId + ", batchId=" + batchId + "）");
             }
+            vaccineBatchService.incrementStockByQuantity(batchId, total);
+            StockTransferLog log = StockTransferLog.builder()
+                    .batchId(batchId)
+                    .fromType(TransferTypeEnum.SITE.getCode())
+                    .fromId(siteId)
+                    .toType(TransferTypeEnum.WAREHOUSE.getCode())
+                    .toId(null)
+                    .quantity(total)
+                    .operatorId(operatorId)
+                    .transferTime(LocalDateTime.now())
+                    .build();
+            stockTransferLogMapper.insert(log);
         }
     }
 

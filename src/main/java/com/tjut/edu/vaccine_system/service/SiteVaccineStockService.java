@@ -55,6 +55,13 @@ public interface SiteVaccineStockService extends IService<SiteVaccineStock> {
     boolean reduceAvailableStock(Long siteId, Long batchId, int quantity);
 
     /**
+     * 接种点整批退回：同时扣减可用与锁定库存（删除接种点时将该点该批次全部退回总仓用）
+     *
+     * @return 是否扣减成功
+     */
+    boolean reduceAvailableAndLockedStock(Long siteId, Long batchId, int availableQty, int lockedQty);
+
+    /**
      * 过期联动：将该批次在所有接种点的 available_stock、locked_stock 置为 0
      */
     int zeroOutByBatchId(Long batchId);
@@ -73,4 +80,14 @@ public interface SiteVaccineStockService extends IService<SiteVaccineStock> {
      * 某接种点按批次库存列表（含疫苗名、批号、效期），用于库存管理展示与退回
      */
     List<SiteStockBatchVO> listBySiteIdWithBatchInfo(Long siteId);
+
+    /**
+     * 管理员-按疫苗减少接种点可用库存（FEFO 从多批次扣减，不退回总仓）
+     *
+     * @param siteId    接种点ID
+     * @param vaccineId 疫苗ID
+     * @param quantity  减少数量
+     * @return 实际扣减的数量（可能小于 quantity 若库存不足）
+     */
+    int reduceAvailableStockByVaccine(Long siteId, Long vaccineId, int quantity);
 }

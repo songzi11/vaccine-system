@@ -1,24 +1,19 @@
 package com.tjut.edu.vaccine_system.model.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
-
-/** 接种点库存-增加 DTO */
+/**
+ * 管理员-接种点库存增加请求（从总仓按疫苗 FEFO 调拨至该接种点）
+ */
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class StockAddDTO implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+public class StockAddDTO {
 
     @NotNull(message = "疫苗ID不能为空")
     private Long vaccineId;
-    /** 已废弃，接口固定每次+1，无需传 */
+
+    @NotNull(message = "增加数量不能为空")
+    @Min(value = 1, message = "增加数量至少为1")
     private Integer quantity;
 }

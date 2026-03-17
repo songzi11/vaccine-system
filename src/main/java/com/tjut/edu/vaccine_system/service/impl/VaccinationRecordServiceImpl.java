@@ -137,8 +137,12 @@ public class VaccinationRecordServiceImpl extends ServiceImpl<VaccinationRecordM
             throw new BizException(BizErrorCode.BAD_REQUEST, "该接种点该批次锁定库存不足，无法完成核销");
         }
 
+        // 设置留观状态：留观时长（分钟），默认30分钟
+        int observationMinutes = dto.getObservationMinutes() != null && dto.getObservationMinutes() > 0
+                ? dto.getObservationMinutes() : 30;
         appointment.setStatus(AppointmentStatusEnum.OBSERVING.getCode());
         appointment.setObserveStartTime(LocalDateTime.now());
+        appointment.setObserveDuration(observationMinutes);
         appointmentService.updateById(appointment);
 
         // 3. 根据当前接种日期 + 疫苗“下一针间隔”计算 next_vaccination_date（vaccine 已在上方校验时加载）

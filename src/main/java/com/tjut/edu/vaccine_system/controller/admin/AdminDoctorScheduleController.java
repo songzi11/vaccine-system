@@ -1,5 +1,6 @@
 package com.tjut.edu.vaccine_system.controller.admin;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.tjut.edu.vaccine_system.common.result.PageResult;
 import com.tjut.edu.vaccine_system.common.result.Result;
@@ -9,6 +10,7 @@ import com.tjut.edu.vaccine_system.model.entity.SysUser;
 import com.tjut.edu.vaccine_system.model.vo.DoctorScheduleListVO;
 import com.tjut.edu.vaccine_system.service.DoctorScheduleService;
 import com.tjut.edu.vaccine_system.service.SysUserService;
+import com.tjut.edu.vaccine_system.service.VaccinationSiteService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ public class AdminDoctorScheduleController {
 
     private final DoctorScheduleService doctorScheduleService;
     private final SysUserService sysUserService;
+    private final VaccinationSiteService vaccinationSiteService;
 
     @Operation(summary = "分页查询排班（含医生状态，注销/禁用医生的排班不显示操作按钮）")
     @GetMapping(value = {"/page", "/list"})
@@ -48,11 +51,19 @@ public class AdminDoctorScheduleController {
 
     private DoctorScheduleListVO toListVO(DoctorSchedule s) {
         Integer doctorStatus = null;
+        String doctorName = null;
         if (s.getDoctorId() != null) {
             SysUser user = sysUserService.getById(s.getDoctorId());
             doctorStatus = user != null && user.getStatus() != null ? user.getStatus() : 2;
+            doctorName = user != null ? user.getRealName() : null;
         } else {
             doctorStatus = 2;
+        }
+        // 获取接种点名称
+        String siteName = null;
+        if (s.getSiteId() != null) {
+            var site = vaccinationSiteService.getById(s.getSiteId());
+            siteName = site != null ? site.getSiteName() : null;
         }
         return DoctorScheduleListVO.builder()
                 .id(s.getId())
@@ -66,6 +77,8 @@ public class AdminDoctorScheduleController {
                 .createTime(s.getCreateTime())
                 .updateTime(s.getUpdateTime())
                 .doctorStatus(doctorStatus)
+                .doctorName(doctorName)
+                .siteName(siteName)
                 .build();
     }
 
@@ -79,8 +92,21 @@ public class AdminDoctorScheduleController {
     @Operation(summary = "新增排班")
     @PostMapping
     public Result<DoctorSchedule> save(@RequestBody DoctorSchedule entity) {
+        // 强制容量为1（每个医生每个时段只能预约一个孩子）
+        entity.setMaxCapacity(1);
         if (entity.getCurrentCount() == null) entity.setCurrentCount(0);
         if (entity.getStatus() == null) entity.setStatus(1);
+
+        // 检查同一医生同一时段是否已存在排班
+        boolean exists = doctorScheduleService.count(new LambdaQueryWrapper<DoctorSchedule>()
+                .eq(DoctorSchedule::getDoctorId, entity.getDoctorId())
+                .eq(DoctorSchedule::getSiteId, entity.getSiteId())
+                .eq(DoctorSchedule::getScheduleDate, entity.getScheduleDate())
+                .eq(DoctorSchedule::getTimeSlot, entity.getTimeSlot())) > 0;
+        if (exists) {
+            return Result.fail("该医生在该时段已存在排班，不可重复添加");
+        }
+
         doctorScheduleService.save(entity);
         return Result.ok("新增成功", doctorScheduleService.getById(entity.getId()));
     }

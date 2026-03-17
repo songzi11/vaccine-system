@@ -77,7 +77,12 @@ public class DoctorScheduleServiceImpl extends ServiceImpl<DoctorScheduleMapper,
                 .eq(status != null, DoctorSchedule::getStatus, status)
                 .orderByDesc(DoctorSchedule::getScheduleDate)
                 .orderByAsc(DoctorSchedule::getTimeSlot);
-        return page(page, w);
+        page(page, w);
+        // 过滤掉禁用/注销医生的排班
+        List<DoctorSchedule> filteredRecords = filterByDoctorStatus(page.getRecords());
+        page.setRecords(filteredRecords);
+        page.setTotal(filteredRecords.size());
+        return page;
     }
 
     @Override

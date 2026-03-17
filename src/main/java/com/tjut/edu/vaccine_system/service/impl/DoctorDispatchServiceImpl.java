@@ -76,7 +76,14 @@ public class DoctorDispatchServiceImpl extends ServiceImpl<DoctorDispatchMapper,
     public List<DoctorDispatchVO> listAll() {
         List<DoctorDispatch> list = list(new LambdaQueryWrapper<DoctorDispatch>()
                 .orderByDesc(DoctorDispatch::getApplyTime));
-        return list.stream().map(this::toVO).collect(Collectors.toList());
+        // 过滤掉禁用/注销医生的派遣记录
+        return list.stream()
+                .filter(d -> {
+                    SysUser doctor = sysUserService.getById(d.getDoctorId());
+                    return doctor != null && Integer.valueOf(com.tjut.edu.vaccine_system.model.enums.UserStatusEnum.NORMAL.getCode()).equals(doctor.getStatus());
+                })
+                .map(this::toVO)
+                .collect(Collectors.toList());
     }
 
     @Override

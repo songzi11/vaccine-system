@@ -49,9 +49,4 @@ public interface VaccinationSiteService extends IService<VaccinationSite> {
      * 用于医生账户被禁用或注销时，其驻场接种点自动转为禁用。
      */
     void disableSitesByResidentDoctorId(Long doctorId);
-
-    /**
-     * 删除接种点：先将该接种点所有疫苗可用库存退回到总仓，再物理删除接种点记录。
-     */
-    boolean removeSite(Long id);
 }

@@ -56,6 +56,14 @@ public interface SiteVaccineStockMapper extends BaseMapper<SiteVaccineStock> {
     int reduceAvailableStock(@Param("siteId") Long siteId, @Param("batchId") Long batchId, @Param("quantity") int quantity);
 
     /**
+     * 接种点整批退回总仓：同时扣减可用与锁定库存（删除接种点时将该点所有库存退回总仓）
+     *
+     * @return 影响行数，1 表示成功
+     */
+    int reduceAvailableAndLockedStock(@Param("siteId") Long siteId, @Param("batchId") Long batchId,
+                                     @Param("availableQty") int availableQty, @Param("lockedQty") int lockedQty);
+
+    /**
      * 过期联动：将某批次在所有接种点的 available_stock、locked_stock 置为 0
      *
      * @return 影响行数

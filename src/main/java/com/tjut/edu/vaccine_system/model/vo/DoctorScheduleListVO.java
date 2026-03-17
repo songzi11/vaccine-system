@@ -33,4 +33,10 @@ public class DoctorScheduleListVO implements Serializable {
     private LocalDateTime updateTime;
     /** 医生用户状态：0=正常 1=已禁用 2=已注销；注销/禁用时不可操作 */
     private Integer doctorStatus;
+
+    /** 医生姓名 */
+    private String doctorName;
+
+    /** 接种点名称 */
+    private String siteName;
 }

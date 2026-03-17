@@ -45,6 +45,8 @@ public class Appointment implements Serializable {
     private String remark;
     /** 留观开始时间（完成接种时写入） */
     private LocalDateTime observeStartTime;
+    /** 留观时长（分钟，医生核销时设置，默认30分钟） */
+    private Integer observeDuration;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
     @TableField(fill = FieldFill.INSERT_UPDATE)

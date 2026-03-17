@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.tjut.edu.vaccine_system.model.dto.CreateAppointmentDTO;
 import com.tjut.edu.vaccine_system.model.entity.Appointment;
 import com.tjut.edu.vaccine_system.model.vo.AppointmentListVO;
+import com.tjut.edu.vaccine_system.model.vo.ScheduleVO;
 
 /**
  * 预约接种 Service（排班先行：选排班→已预约→签到→预检→完成接种）
@@ -35,4 +36,10 @@ public interface AppointmentService extends IService<Appointment> {
 
     /** 用户取消预约：仅本人、且状态为可取消(1/6/7/9/10)时允许，已预约(1)时回退排班名额 */
     void cancelByUser(Long appointmentId, Long userId);
+
+    /** 查询排班列表并标记是否已被预约 */
+    java.util.List<ScheduleVO> listSchedulesWithBookedStatus(Long siteId, java.time.LocalDate fromDate, java.time.LocalDate toDate);
+
+    /** 检查留观时间是否到期，将留观中(10)且超过留观时长的预约更新为已完成(2) */
+    int completeObservationExpired();
 }

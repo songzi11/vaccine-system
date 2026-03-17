@@ -1,5 +1,7 @@
 # 疫苗接种系统 (Vaccine Management System)
 
+**本科毕业设计项目，已完成最终版本。** 本文档为项目完结后的最终版说明。
+
 疫苗预约与接种管理系统：支持管理员、医生、居民三端，覆盖预约审核、排期、接种核销、库存调拨、统计报表与智能提醒。
 
 | 角色     | 说明 |
@@ -8,7 +10,7 @@
 | **医生**   | 预约审核、待接种核销、派遣信息、公告发布（需审核） |
 | **居民**   | 宝宝档案、预约接种、接种点查询、我的预约、接种记录、公告 |
 
-- **后端**：本仓库 `vaccine_system`（Spring Boot 3.2 + MyBatis-Plus + MySQL）  
+- **后端**：本仓库 `vaccine_system`（Spring Boot 3.2.8 + MyBatis-Plus + MySQL 8）  
 - **前端**：UniApp 多端应用（H5 / 小程序 / App），可与同工作区下的 `vaccine.app` 项目配合使用。  
 - **接口基础 URL**：默认 `http://localhost:8080`（可配置）。
 
@@ -26,7 +28,7 @@
 
 | 端   | 技术 |
 |------|------|
-| 后端 | Java 17、Spring Boot 3.2、MyBatis-Plus、MySQL 8、Lombok、AOP、Validation |
+| 后端 | Java 17、Spring Boot 3.2.8、MyBatis-Plus、MySQL 8、Lombok、AOP、Validation、Spring Security、OpenAPI 3 |
 | 前端 | UniApp（Vue 2/3）、多端（H5 / 微信小程序 / App） |
 
 ---
@@ -88,7 +90,7 @@ vaccine_system/
 | [API 接口文档](docs/API.md) | 接口路径、请求/响应、路由规范（admin/doctor/user/common） |
 | [数据库设计](docs/database.md) | 表结构与关系说明 |
 
-业务或接口变更时，请同步更新上述文档。
+上述文档已按项目最终版本更新，归档后可作答辩与交付参考。
 
 ---
 
@@ -100,6 +102,6 @@ vaccine_system/
 
 ---
 
-## 许可证
+## 许可证与说明
 
-本项目仅供学习与毕业设计使用。
+本项目为本科毕业设计作品，仅供学习与答辩使用。文档版本为项目完结后的最终版，与当前代码及数据库脚本一致。

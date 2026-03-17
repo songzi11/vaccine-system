@@ -1,5 +1,7 @@
 # 疫苗接种系统 - 数据库设计文档（统一）
 
+> **最终版**（本科毕业设计完结）。项目说明与快速开始见 [README.md](README.md)，业务与流程说明见 [使用手册](使用文档.md)。
+
 ## 一、表关系说明
 
 ### 1. 总体关系
@@ -16,11 +18,16 @@ child_profile（儿童档案）
   └── vaccination_record：儿童 ──1:N── 接种记录（child_id）
 
 vaccination_site（接种点）
-  ├── vaccine_site_stock：接种点 ──1:N── 按点库存（乐观锁 version）
-  ├── vaccine_inventory：接种点 ──1:N── 按批次库存
+  ├── vaccine_site_stock：接种点 ──1:N── 按点简易库存（乐观锁 version，用于预警）
+  ├── site_vaccine_stock：接种点 ──1:N── 按批次库存（available/locked，预约扣减）
+  ├── vaccine_inventory：接种点 ──1:N── 按批次库存（旧表，溯源）
   ├── appointment：接种点 ──1:N── 预约
   ├── vaccination_record：接种点 ──1:N── 接种记录
+  ├── doctor_schedule：接种点 ──1:N── 医生排班（排班先行）
   └── doctor_dispatch：调出/调入站点 ──N:1── 医生调遣申请（from_site_id / to_site_id）
+
+doctor_schedule（医生排班表）
+  └── appointment：排班 ──1:1── 预约（一个排班只能被一个预约使用，capacity=1）
 
 vaccine（疫苗信息）
   ├── vaccine_site_stock：疫苗 ──1:N── 按点库存（预约扣减）
@@ -45,7 +52,7 @@ record（接种记录简表，与预约 order_id 关联）
 | 用户 ↔ 角色 | `sys_user.role`：ADMIN / DOCTOR / RESIDENT。 |
 | 家长 ↔ 儿童档案 | `child_profile.parent_id`，用于预约选儿童、禁忌症避坑。 |
 | 疫苗 ↔ 库存 | `vaccine_site_stock` 按疫苗+接种点，预约扣减、乐观锁；`vaccine_inventory` 按批次溯源。 |
-| 预约 | 关联家长、儿童、接种点、疫苗；状态为整数：0-待审批，5-医生已通过待排班，1-已排班，2-已完成，3-已取消，4-已过期。 |
+| 预约 | 关联家长、儿童、接种点、疫苗、排班；状态为整数：1-已预约，6-已签到，7-预检通过，9-预检未通过，10-留观中，2-已完成，3-已取消，4-已过期。 |
 | 接种记录 | `record` 表与 `vaccination_record` 表：关联预约、儿童、疫苗批号、接种部位、留观无异常等。 |
 
 ---
@@ -112,6 +119,22 @@ record（接种记录简表，与预约 order_id 关联）
 
 同意后自动更新 vaccination_site.current_doctor_id（调入站点设驻场医生，调出站点若为该医生则清空）。
 
+### 3.2 doctor_schedule（医生排班表，排班先行）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | bigint | 主键。 |
+| doctor_id | bigint | 医生用户ID。 |
+| site_id | bigint | 接种点ID。 |
+| schedule_date | date | 排班日期。 |
+| time_slot | varchar(20) | 时段（如 09:00-09:30）。 |
+| max_capacity | int | 最大容量（默认1，一个排班只能被一个预约使用）。 |
+| current_count | int | 当前预约数（达到max_capacity后不可再预约）。 |
+| status | tinyint | 0-禁用，1-启用。 |
+| create_time / update_time | datetime | 创建/更新时间。 |
+
+**约束**：一个排班只能被一个预约使用（capacity=1），预约时通过doctor_schedule_id关联。
+
 ### 4. vaccine（疫苗信息表）
 
 | 字段 | 类型 | 说明 |
@@ -130,19 +153,30 @@ record（接种记录简表，与预约 order_id 关联）
 | status | tinyint | 0-下架，1-上架。 |
 | create_time / update_time | datetime | 创建/更新时间。 |
 
-### 5. vaccine_site_stock（疫苗按接种点库存，乐观锁）
+### 5. vaccine_site_stock（疫苗按接种点库存，乐观锁，用于预警）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | bigint | 主键。 |
 | vaccine_id | bigint | 疫苗ID。 |
 | site_id | bigint | 接种点ID。 |
-| stock | int | 当前可用库存，预约时扣减。 |
+| stock | int | 当前可用库存（简易库存，用于预警）。 |
 | warning_threshold | int | 库存预警阈值。 |
 | version | int | 乐观锁版本号。 |
 | create_time / update_time | datetime | 创建/更新时间。 |
 
-### 6. vaccine_inventory（疫苗库存表，按批次）
+### 5.1 site_vaccine_stock（接种点按批次库存，预约锁定/核销扣减）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | bigint | 主键。 |
+| site_id | bigint | 接种点ID。 |
+| batch_id | bigint | 批次ID（vaccine_batch）。 |
+| available_stock | int | 可用库存（可被预约锁定）。 |
+| locked_stock | int | 预约锁定库存（已预约未核销）。 |
+| created_at / updated_at | datetime | 创建/更新时间。 |
+
+### 6. vaccine_inventory（疫苗库存表，按批次，旧表兼容）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -165,12 +199,16 @@ record（接种记录简表，与预约 order_id 关联）
 | user_id | bigint | 家长/居民用户ID。 |
 | child_id | bigint | 儿童档案ID（可选）。 |
 | vaccine_id | bigint | 疫苗ID。 |
+| batch_id | bigint | FEFO分配的批次ID（预约成功时锁定）。 |
 | site_id | bigint | 接种点ID。 |
+| doctor_schedule_id | bigint | 排班ID（预约时必选，排班先行）。 |
 | appointment_date | date | 预约日期。 |
 | time_slot | varchar(20) | 时段。 |
-| status | tinyint | 0-待审批，5-医生已通过待排班，1-已排班，2-已完成，3-已取消，4-已过期。 |
+| status | tinyint | 1-已预约，6-已签到，7-预检通过，9-预检未通过，10-留观中，2-已完成，3-已取消，4-已过期。 |
 | doctor_id | bigint | 分配医生ID。 |
 | remark | varchar(200) | 备注。 |
+| observe_start_time | datetime | 留观开始时间（完成接种时写入）。 |
+| observe_duration | int | 留观时长（分钟，医生核销时设置，默认30分钟）。 |
 | create_time / update_time | datetime | 创建/更新时间。 |
 
 ### 8. record（接种记录表，与预约关联）
@@ -199,8 +237,10 @@ record（接种记录简表，与预约 order_id 关联）
 | user_id | bigint | 家长/居民ID（冗余）。 |
 | vaccine_id | bigint | 疫苗ID。 |
 | appointment_id | bigint | 关联预约ID。 |
-| inventory_id | bigint | 使用的库存批次ID。 |
-| batch_no | varchar(50) | 疫苗批号。 |
+| inventory_id | bigint | 使用的库存批次ID（旧表兼容）。 |
+| batch_id | bigint | 接种使用批次ID（vaccine_batch，FEFO分配）。 |
+| vaccine_code | varchar(100) | 疫苗编号：核销时自动生成，唯一且不可修改；格式 SHORTNAME-YYYYMMDD-BATCHSUFFIX-序号。 |
+| batch_no | varchar(50) | 疫苗批号冗余（展示用，从batch带出）。 |
 | dose_number | int | 第几针/剂次。 |
 | vaccination_date | datetime | 实际接种时间。 |
 | doctor_id | bigint | 接种医生ID。 |
@@ -238,6 +278,8 @@ record（接种记录简表，与预约 order_id 关联）
 | is_top | tinyint | 是否置顶：0-否，1-是。 |
 | status | tinyint | 0-草稿/下架，1-已发布。 |
 | publish_time | datetime | 发布时间。 |
+| target_user_id | bigint | 定向用户ID：非空时仅该用户可见。 |
+| notice_style | varchar(20) | 展示样式：NORMAL / WARNING / FROZEN。 |
 | create_time / update_time | datetime | 创建/更新时间。 |
 
 ### 12. notice_feedback（公告意见表）
@@ -262,9 +304,16 @@ record（接种记录简表，与预约 order_id 关联）
 
 唯一约束：同一用户对同一公告仅一条已读记录。
 
-### 14. ~~doctor_site（已移除）~~
+### 14. doctor_site（医生-接种点关联表，兼容保留）
 
-医生-接种点关系由 **doctor_schedule**（排班表，含 doctor_id + site_id）与 **doctor_dispatch**（调遣审批）及 **vaccination_site.current_doctor_id**（驻场医生）体现，无需单独 doctor_site 表。
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | bigint | 主键。 |
+| user_id | bigint | 医生用户ID。 |
+| site_id | bigint | 接种点ID。 |
+| create_time / update_time | datetime | 创建/更新时间。 |
+
+建表脚本中保留此表以兼容历史数据。业务上医生-接种点关系由 **doctor_schedule**（排班）、**doctor_dispatch**（调遣）及 **vaccination_site.current_doctor_id**（驻场医生）体现。
 
 ---
 
@@ -337,3 +386,5 @@ record（接种记录简表，与预约 order_id 关联）
 - **完整建表脚本**：`src/main/resources/sql/vaccine_system.sql`
 
 该脚本包含本文档所述全部表结构及外键、索引，执行顺序已按依赖关系排列（先父表后子表）。首次部署时直接执行该脚本即可完成数据库初始化。热力图等统计功能不建新表，由 vaccination_record 等表聚合查询。
+
+*文档版本：最终版（本科毕业设计完结），与当前 SQL 脚本一致。*

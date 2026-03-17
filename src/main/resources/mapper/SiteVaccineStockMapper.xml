@@ -61,6 +61,14 @@
         WHERE site_id = #{siteId} AND batch_id = #{batchId} AND available_stock >= #{quantity}
     </update>
 
+    <!-- 接种点整批退回总仓：同时扣减可用+锁定（删除接种点时将该点该批次全部退回） -->
+    <update id="reduceAvailableAndLockedStock">
+        UPDATE site_vaccine_stock
+        SET available_stock = available_stock - #{availableQty}, locked_stock = locked_stock - #{lockedQty}, updated_at = NOW()
+        WHERE site_id = #{siteId} AND batch_id = #{batchId}
+          AND available_stock >= #{availableQty} AND locked_stock >= #{lockedQty}
+    </update>
+
     <!-- 过期联动：该批次在各接种点库存清零 -->
     <update id="zeroOutByBatchId">
         UPDATE site_vaccine_stock
