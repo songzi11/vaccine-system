@@ -85,7 +85,7 @@ class VaccineServiceTest {
         // Given: 创建一个疫苗
         Vaccine vaccine = new Vaccine();
         vaccine.setVaccineName("测试疫苗2_" + System.currentTimeMillis());
-        vaccine.setVaccineCode("TEST2_" + System.currentTimeMillis());
+        vaccine.setShortCode("TEST2_" + System.currentTimeMillis());
         vaccine.setStatus(0);
         vaccineService.save(vaccine);
         Long vaccineId = vaccine.getId();
