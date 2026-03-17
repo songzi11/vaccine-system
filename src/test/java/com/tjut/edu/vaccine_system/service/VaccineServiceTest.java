@@ -67,7 +67,7 @@ class VaccineServiceTest {
         // Given: 创建一个疫苗（下架状态）
         Vaccine vaccine = new Vaccine();
         vaccine.setVaccineName("测试疫苗_" + System.currentTimeMillis());
-        vaccine.setVaccineCode("TEST_" + System.currentTimeMillis());
+        vaccine.setShortCode("TEST_" + System.currentTimeMillis());
         vaccine.setStatus(0); // 下架状态
         vaccineService.save(vaccine);
         Long vaccineId = vaccine.getId();
